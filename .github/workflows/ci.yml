@@ -1,0 +1,57 @@
+name: ci
+# only deploy site from master branch
+on:
+  push:
+    branches:
+      - main
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # https://github.com/actions/checkout
+      - name: Checkout 🛎️
+        uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+
+      # https://github.com/cypress-io/github-action
+      - name: Install and test 📦✅
+        uses: cypress-io/github-action@v1
+        with:
+          start: 'npm run docs:dev'
+          wait-on: 'http://localhost:8080/hos/'
+          record: true
+          group: 'development'
+          tag: 'ci'
+        env:
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+
+      - name: Build site 🏗
+        run: npm run docs:build
+
+      - name: Prepare built site for testing 🚛
+        run: |
+          mkdir output
+          cp -r ./docs/.vuepress/dist output/triple-tested
+      - name: Test production site ✅
+        uses: cypress-io/github-action@v1
+        with:
+          # we have already installed all dependencies above
+          install: false
+          start: 'npx serve output'
+          wait-on: 'http://localhost:5000/hos/'
+          config: baseUrl=http://localhost:5000/triple-tested/
+          record: true
+          group: 'production bundle'
+        env:
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+
+      # https://github.com/marketplace/actions/github-pages-action
+      - name: Deploy 🚀
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/.vuepress/dist
+          # use the same commit message for `gh-pages` branch
+          # TODO: this does not seem to work, the commit messages are always "deployed"
+          commit_message: ${{ github.event.head_commit.message }}
